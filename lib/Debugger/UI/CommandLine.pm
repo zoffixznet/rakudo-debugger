@@ -26,38 +26,38 @@ my class SourceFile {
     has @!line_offsets;
     has @!regex_regions;
     has %!routine_regions{Range};
-    
+
     my class RoutineInfo {
         has $.type;
         has $.name;
     }
-    
+
     method BUILD(:$!filename, :$!source) {
         # Ensure source ends with a newline.
         unless $!source ~~ /\n$/ {
             $!source ~= "\n";
         }
-        
+
         # Store (abbreviated if needed) lines.
         @!lines = lines($!source).map(-> $l {
             $l.chars > 77 ?? $l.substr(0, 74) ~ '...' !! $l
         });
-        
+
         # Calculate line offsets.
         for $!source.match(/\N* \r?\n/, :g) -> $m {
             @!line_offsets.push($m.from);
         }
         @!line_offsets.push($!source.chars);
     }
-    
+
     method add_regex_region($from_pos, $to_pos) {
         @!regex_regions.push(item $from_pos..$to_pos);
     }
-    
+
     method add_routine_region($from_pos, $to_pos, $type, $name) {
         %!routine_regions{item $from_pos..$to_pos} = RoutineInfo.new(:$type, :$name);
     }
-    
+
     method routine_containing($from_pos, $to_pos) {
         my @best = %!routine_regions.grep(
                 { ($from_pos..$to_pos) ~~ $^r.key }
@@ -66,7 +66,7 @@ my class SourceFile {
             );
         @best ?? @best[0].value.name !! ''
     }
-    
+
     method line_of($pos, $def_line, $def_pos) {
         my $last_p = 0;
         for @!line_offsets.kv -> $l, $p {
@@ -77,25 +77,25 @@ my class SourceFile {
         }
         return ($def_line, $def_pos)
     }
-    
+
     sub normal_lines(@lines, $color) {
         @lines.map: {
             colored('| ', $color) ~ $_.subst("\r", "")
         }
     }
-    
+
     sub throw_lines(@lines) {
         @lines.map: {
             colored('| ' ~ $_.subst("\r", ""), 'yellow')
         }
     }
-    
+
     sub error_lines(@lines) {
         @lines.map: {
             colored('| ' ~ $_.subst("\r", ""), 'red')
         }
     }
-    
+
     sub highlighted_lines(@lines, $start_line_pos, $end_line_pos) {
         @lines.map: {
             state $line = 0;
@@ -126,7 +126,7 @@ my class SourceFile {
             $rendered.subst("\r", "")
         }
     }
-    
+
     method regex_match_status($from, $to, $ctx) {
         if ($from..$to) ~~ any(@!regex_regions) {
             my $cur = try eval_in_ctx($ctx, q[DYNAMIC::<$¢>]);
@@ -155,7 +155,7 @@ my class SourceFile {
         }
         ()
     }
-    
+
     method summary_around($from, $to, $ctx) {
         my ($from_line, $from_pos) = self.line_of($from, 0, 0);
         my ($to_line, $to_pos)     = self.line_of($to, $from_line, $from_pos);
@@ -170,7 +170,7 @@ my class SourceFile {
             normal_lines(@!lines[$to_line^..$ctx_end], 'blue'),
             self.regex_match_status($from, $to, $ctx);
     }
-    
+
     method throw_summary($e, $line) {
         my $ctx_start = $line - 2;
         $ctx_start = 0 if $ctx_start < 0;
@@ -184,7 +184,7 @@ my class SourceFile {
             throw_lines([@!lines[$line]]),
             normal_lines(@!lines[$line^..$ctx_end], 'yellow');
     }
-    
+
     method exception_summary($e, $line) {
         my $ctx_start = $line - 2;
         $ctx_start = 0 if $ctx_start < 0;
@@ -217,18 +217,18 @@ my class DebugState {
     my %breakpoints;
     my %tracepoints;
     my @tp_log;
-    
+
     my class TracePointLogEntry {
         has $.tp;
         has $.result;
         has $.fail;
     }
-    
+
     my class TracePoint {
         has $.file;
         has $.line;
         has $.expr;
-        
+
         method hit($ctx) {
             try {
                 @tp_log.push(TracePointLogEntry.new(
@@ -251,16 +251,16 @@ my class DebugState {
     method set_current_exception($ex) {
         $cur_ex = $ex;
     }
-    
+
     method enter_death_throes() {
         # Or is that the death throws?
         $dying = True;
     }
-    
+
     method in_prompt() {
         $in_prompt
     }
-    
+
     method normalize_filename($file) {
         if %sources{$file}:exists {
             return $file;
@@ -275,7 +275,7 @@ my class DebugState {
         }
         return Nil;
     }
-    
+
     method add_breakpoint($file, $line) {
         if self.normalize_filename($file) -> $norm_file {
             push %breakpoints{$norm_file}, $line - 1;
@@ -284,7 +284,7 @@ my class DebugState {
             say colored("Cannot add breakpoint to unknown file '$file'", 'red');
         }
     }
-    
+
     method remove_breakpoint($file, $line) {
         if self.normalize_filename($file) -> $norm_file {
             if %breakpoints{$norm_file} {
@@ -300,7 +300,7 @@ my class DebugState {
             say colored("Cannot remove breakpoint from unknown file '$file'", 'red');
         }
     }
-    
+
     method is_breakpoint_at($filename, $from, $to) {
         if %breakpoints{$filename} -> @bp_lines {
             my ($from_line, $) = %sources{$filename}.line_of($from, -1, -1);
@@ -308,7 +308,7 @@ my class DebugState {
             return any(@bp_lines) ~~ ($from_line..$to_line);
         }
     }
-    
+
     method add_tracepoint($file, $line, $expr) {
         if self.normalize_filename($file) -> $norm_file {
             push %tracepoints{$norm_file}, TracePoint.new(:file($norm_file), :$line, :$expr);
@@ -317,7 +317,7 @@ my class DebugState {
             say colored("Cannot add tracepoint to unknown file '$file'", 'red');
         }
     }
-    
+
     method log_tracepoints($ctx, $filename, $from, $to) {
         if %tracepoints{$filename} -> @tps {
             my ($from_line, $) = %sources{$filename}.line_of($from, -1, -1);
@@ -325,7 +325,7 @@ my class DebugState {
             @tps.grep({ $^tp.line - 1 ~~ ($from_line..$to_line) })>>.hit($ctx);
         }
     }
-    
+
     method render_one_tracepoint($tp) {
         say colored(">>> ", 'blue') ~ $tp.expr;
         for @tp_log.grep(*.tp === $tp) {
@@ -334,7 +334,7 @@ my class DebugState {
                 !! colored("* ", 'blue') ~ $_.result();
         }
     }
-    
+
     method render_all_tracepoints() {
         my $last_tp;
         for @tp_log -> (:$tp, :$result, :$fail) {
@@ -347,7 +347,7 @@ my class DebugState {
             $last_tp = $tp;
         }
     }
-    
+
     method should_break_at($filename, $from, $to) {
         given $run_mode {
             when Step {
@@ -370,7 +370,7 @@ my class DebugState {
                 }
             }
             when StepOut {
-                if ($filename ne %stepping_out_of<file> || 
+                if ($filename ne %stepping_out_of<file> ||
                          %sources{$filename}.routine_containing($from, $to) ne %stepping_out_of<routine>)
                          && (+lines(Backtrace.new().full) - 1) < %stepping_out_of<depth> {
                     $run_mode = Step;
@@ -386,17 +386,17 @@ my class DebugState {
             }
         }
     }
-    
+
     method should_break_on_throw() {
         $run_mode != RunToUnhandledOrBreakpoint
     }
-    
+
     method prompt_color() {
         $dying  ?? 'red'    !!
         $cur_ex ?? 'yellow' !!
                    'blue'
     }
-    
+
     method complain_about_being_dying() {
         say colored(
             'Cannot continue execution after an unhandled exception',
@@ -586,13 +586,13 @@ my class DebugState {
                 }
             }
         }
-        
+
         # Clear current exception on leaving here, since going on with
         # execution from an exception state leaves us in a non-exception
         # state.
         LEAVE $cur_ex = Nil;
     }
-    
+
     method usage() {
         join "\n",
             ('<enter>                single step, stepping into any calls' unless $dying),
@@ -616,7 +616,7 @@ my class DebugState {
             'q[uit]                 exit the debugger'
             ;
     }
-    
+
     method reset() {
         $run_mode  = Step;
         $dying     = False;
@@ -683,7 +683,7 @@ my $CUR_EX;
         if DebugState.should_break_on_throw() {
             $IN_THROWN = 1;
             $CUR_EX = $e;
-            nqp::call(&thrown, $vm_ex);
+            $ = nqp::call(&thrown, $vm_ex);
             $IN_THROWN = 0;
         }
     }
